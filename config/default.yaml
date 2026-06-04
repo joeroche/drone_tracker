@@ -1,0 +1,57 @@
+camera:
+  mode: mjpeg
+  mjpeg_url: "http://192.168.4.10:81/stream"
+  tcp_host: "192.168.4.10"
+  tcp_port: 5005
+  read_timeout_s: 3.0
+  reconnect_delay_s: 1.0
+  max_fps: 12.0
+
+controller:
+  host: "192.168.4.20"
+  port: 5006
+  connect_timeout_s: 1.0
+  command_timeout_s: 0.25
+  command_rate_hz: 20.0
+
+model:
+  path: "models/drone-yolo.pt"
+  imgsz: 512
+  confidence: 0.35
+  iou: 0.50
+  device: auto
+  class_name: drone
+
+tracking:
+  deadband_px: 24.0
+  lock_duration_s: 1.0
+  unlock_grace_s: 0.35
+  prediction_hold_s: 0.25
+  smoothing_alpha: 0.45
+  stale_frame_s: 0.50
+
+control:
+  pan_gain_deg_per_px: 0.035
+  tilt_gain_deg_per_px: 0.035
+  max_step_deg: 2.0
+  invert_pan: false
+  invert_tilt: true
+
+servos:
+  pan_min_deg: 30.0
+  pan_center_deg: 90.0
+  pan_max_deg: 150.0
+  tilt_min_deg: 45.0
+  tilt_center_deg: 90.0
+  tilt_max_deg: 135.0
+
+calibration:
+  path: "config/calibration.yaml"
+  camera_matrix_path: ""
+  laser_offset_x_px: 0.0
+  laser_offset_y_px: 0.0
+
+debug:
+  show_window: true
+  draw_prediction: true
+  print_status_hz: 1.0

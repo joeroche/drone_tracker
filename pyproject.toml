@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drone-tracker"
+version = "0.1.0"
+description = "Safe ESP32-CAM and pan tilt visual tracking prototype"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python>=4.8",
+  "PyYAML>=6.0",
+  "requests>=2.31",
+  "ultralytics>=8.3"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0"
+]
+
+[project.scripts]
+drone-tracker = "drone_tracker.cli:main"
+drone-calibrate = "drone_tracker.calibrate_cli:main"
+drone-smoke-yolo = "drone_tracker.smoke_yolo:main"
+
+[tool.setuptools.packages.find]
+where = ["mac_tracker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["mac_tracker"]

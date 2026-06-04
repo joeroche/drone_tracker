@@ -1,0 +1,10 @@
+version: 1
+created_at: ""
+frame_width: 0
+frame_height: 0
+laser_offset_x_px: 0.0
+laser_offset_y_px: 0.0
+invert_pan: false
+invert_tilt: true
+pan_center_deg: 90.0
+tilt_center_deg: 90.0
