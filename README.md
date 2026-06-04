@@ -20,6 +20,6 @@ The project uses an AI Thinker ESP32-CAM for video, a second ESP32 for pan and t
 3. Flash the camera firmware to the AI Thinker ESP32-CAM.
 4. Flash the tracker firmware to the second ESP32.
 5. Install the Python package with `python3 -m pip install -e ".[dev]"`.
-6. Run `drone-tracker --config config/local.yaml`.
+6. Run `drone-tracker config/local.yaml`.
 
 See `docs/PROJECT_TODO.md` for the full manual checklist.

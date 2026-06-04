@@ -51,7 +51,7 @@ static void writeUint32(WiFiClient &client, uint32_t value) {
 
 static void writeUint64(WiFiClient &client, uint64_t value) {
   uint8_t bytes[8];
-  for (int i = 7; i >= 0; --i) {
+  for (int i = 7; i >= 0; i -= 1) {
     bytes[7 - i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
   }
   client.write(bytes, sizeof(bytes));
@@ -135,7 +135,7 @@ static esp_err_t streamHandler(httpd_req_t *req) {
       static_cast<unsigned long long>(timestampUs)
     );
 
-    res = httpd_resp_send_chunk(req, "\r\n--", 4);
+    res = httpd_resp_send_chunk(req, "\r\n-" "-", 4);
     if (res == ESP_OK) {
       res = httpd_resp_send_chunk(req, STREAM_BOUNDARY, strlen(STREAM_BOUNDARY));
     }

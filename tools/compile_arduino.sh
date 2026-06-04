@@ -2,9 +2,9 @@
 set -euo pipefail
 
 arduino-cli compile \
-  --fqbn esp32:esp32:esp32cam \
+  -b esp32:esp32:esp32cam \
   firmware/camera_stream_ai_thinker
 
 arduino-cli compile \
-  --fqbn esp32:esp32:esp32doit-devkit-v1 \
+  -b esp32:esp32:esp32doit-devkit-v1 \
   firmware/tracker_controller
