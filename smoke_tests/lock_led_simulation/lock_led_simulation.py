@@ -18,10 +18,10 @@ def main() -> int:
     command = ServoCommand(cfg.servos.pan_center_deg, cfg.servos.tilt_center_deg)
     try:
         print("lock LED on")
-        client.send_target(command, locked=True, aux=False)
+        client.send_target(command, locked=True)
         time.sleep(args.duration_s)
         print("lock LED off")
-        client.send_target(command, locked=False, aux=False)
+        client.send_target(command, locked=False)
     finally:
         client.close()
     return 0

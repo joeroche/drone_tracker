@@ -18,7 +18,7 @@ def main() -> int:
     cfg = load_config(args.config)
     client = TrackerCommandClient(cfg.controller.host, cfg.controller.port, cfg.controller.connect_timeout_s, cfg.controller.command_timeout_s)
     try:
-        ok = client.send_target(ServoCommand(args.pan, args.tilt), locked=args.lock, aux=False)
+        ok = client.send_target(ServoCommand(args.pan, args.tilt), locked=args.lock)
         print(f"sent {int(ok)} pan {args.pan:.1f} tilt {args.tilt:.1f} lock {int(args.lock)}")
         time.sleep(0.1)
     finally:

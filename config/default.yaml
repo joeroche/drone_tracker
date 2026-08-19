@@ -1,7 +1,7 @@
 camera:
   mode: mjpeg
-  mjpeg_url: "http://192.168.4.10:81/stream"
-  tcp_host: "192.168.4.10"
+  mjpeg_url: "http://192.168.4.1:81/stream"
+  tcp_host: "192.168.4.1"
   tcp_port: 5005
   read_timeout_s: 3.0
   reconnect_delay_s: 1.0
@@ -14,13 +14,42 @@ controller:
   command_timeout_s: 0.25
   command_rate_hz: 20.0
 
-model:
-  path: "models/drone-yolo.pt"
-  imgsz: 512
-  confidence: 0.35
-  iou: 0.50
-  device: auto
-  class_name: drone
+detection:
+  mode: drone
+  drone:
+    path: "models/drone-yolo.pt"
+    imgsz: 512
+    confidence: 0.35
+    iou: 0.50
+    device: auto
+    class_name: drone
+  face:
+    backend: insightface
+    model_name: buffalo_s
+    profiles_dir: "profiles/faces"
+    confidence: 0.70
+    similarity_threshold: 0.45
+    margin_threshold: 0.05
+    stability_frames: 3
+    blur_threshold: 80.0
+    min_crop_px: 48
+  object:
+    backend: yolo_world
+    embedding_backend: colorhash
+    profiles_dir: "profiles/objects"
+    yolo_world_model: "yolov8s-world.pt"
+    confidence: 0.25
+    similarity_threshold: 0.70
+    margin_threshold: 0.05
+    stability_frames: 3
+    blur_threshold: 60.0
+    min_crop_px: 48
+    local_verify: true
+  remote:
+    enabled: false
+    endpoint: "http://127.0.0.1:9000"
+    timeout_s: 0.25
+    jpeg_quality: 80
 
 tracking:
   deadband_px: 24.0
@@ -48,8 +77,8 @@ servos:
 calibration:
   path: "config/calibration.yaml"
   camera_matrix_path: ""
-  laser_offset_x_px: 0.0
-  laser_offset_y_px: 0.0
+  alignment_offset_x_px: 0.0
+  alignment_offset_y_px: 0.0
 
 debug:
   show_window: true

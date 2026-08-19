@@ -39,8 +39,8 @@ class TrackerCommandClient:
             self.sock = None
             return False
 
-    def send_target(self, command: ServoCommand, locked: bool, aux: bool = False) -> bool:
-        return self._send({"type": "target", "pan": round(command.pan, 2), "tilt": round(command.tilt, 2), "lock": locked, "aux": aux})
+    def send_target(self, command: ServoCommand, locked: bool) -> bool:
+        return self._send({"type": "target", "pan": round(command.pan, 2), "tilt": round(command.tilt, 2), "lock": locked})
 
     def center(self) -> bool:
         return self._send({"type": "center"})

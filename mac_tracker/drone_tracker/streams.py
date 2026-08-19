@@ -95,8 +95,31 @@ class TcpJpegFrameSource(FrameSource):
             yield decode_jpeg(raw.jpeg), now
 
 
+class SyntheticFrameSource(FrameSource):
+    def __init__(self, max_fps: float = 12.0) -> None:
+        self.min_interval_s = 1.0 / max_fps if max_fps > 0 else 0.08
+        self.frame_index = 0
+
+    def frames(self) -> Iterator[tuple[np.ndarray, float]]:
+        while True:
+            now = time.monotonic()
+            frame = np.zeros((360, 640, 3), dtype=np.uint8)
+            frame[:] = (16, 20, 24)
+            x = 80 + (self.frame_index * 9) % 420
+            y = 120 + int(35 * np.sin(self.frame_index / 8.0))
+            cv2.rectangle(frame, (x, y), (x + 90, y + 120), (36, 180, 150), -1)
+            cv2.rectangle(frame, (x + 12, y + 20), (x + 78, y + 95), (230, 230, 210), -1)
+            cv2.putText(frame, "TRACK", (x + 12, y + 72), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (20, 30, 35), 1)
+            cv2.putText(frame, "synthetic camera", (18, 336), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (140, 210, 210), 1)
+            self.frame_index += 1
+            yield frame, now
+            time.sleep(self.min_interval_s)
+
+
 def make_frame_source(mode: str, mjpeg_url: str, tcp_host: str, tcp_port: int, timeout_s: float, reconnect_delay_s: float, max_fps: float) -> FrameSource:
     normalized = mode.lower().strip()
+    if normalized == "synthetic":
+        return SyntheticFrameSource(max_fps)
     if normalized == "mjpeg":
         return MjpegFrameSource(mjpeg_url, timeout_s, reconnect_delay_s, max_fps)
     if normalized == "tcp":

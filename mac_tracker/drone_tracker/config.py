@@ -28,13 +28,58 @@ class ControllerConfig:
 
 
 @dataclass(frozen=True)
-class ModelConfig:
+class DroneDetectionConfig:
     path: str
     imgsz: int
     confidence: float
     iou: float
     device: str
     class_name: str
+
+
+@dataclass(frozen=True)
+class FaceDetectionConfig:
+    backend: str
+    model_name: str
+    profiles_dir: str
+    confidence: float
+    similarity_threshold: float
+    margin_threshold: float
+    stability_frames: int
+    blur_threshold: float
+    min_crop_px: int
+
+
+@dataclass(frozen=True)
+class ObjectDetectionConfig:
+    backend: str
+    embedding_backend: str
+    profiles_dir: str
+    yolo_world_model: str
+    confidence: float
+    similarity_threshold: float
+    margin_threshold: float
+    stability_frames: int
+    blur_threshold: float
+    min_crop_px: int
+    local_verify: bool
+
+
+@dataclass(frozen=True)
+class RemoteInferenceConfig:
+    enabled: bool = False
+    endpoint: str = "http://127.0.0.1:9000"
+    timeout_s: float = 0.25
+    jpeg_quality: int = 80
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    mode: str
+    drone: DroneDetectionConfig
+    face: FaceDetectionConfig
+    object: ObjectDetectionConfig
+    remote: RemoteInferenceConfig = RemoteInferenceConfig()
 
 
 @dataclass(frozen=True)
@@ -70,8 +115,8 @@ class ServoConfig:
 class CalibrationConfig:
     path: str
     camera_matrix_path: str
-    laser_offset_x_px: float
-    laser_offset_y_px: float
+    alignment_offset_x_px: float
+    alignment_offset_y_px: float
 
 
 @dataclass(frozen=True)
@@ -85,7 +130,7 @@ class DebugConfig:
 class AppConfig:
     camera: CameraConfig
     controller: ControllerConfig
-    model: ModelConfig
+    detection: DetectionConfig
     tracking: TrackingConfig
     control: ControlConfig
     servos: ServoConfig
@@ -124,10 +169,17 @@ def load_config(path: str | Path) -> AppConfig:
 
 
 def parse_config(raw: dict[str, Any]) -> AppConfig:
+    detection = raw["detection"]
     return AppConfig(
         camera=CameraConfig(**raw["camera"]),
         controller=ControllerConfig(**raw["controller"]),
-        model=ModelConfig(**raw["model"]),
+        detection=DetectionConfig(
+            mode=detection["mode"],
+            drone=DroneDetectionConfig(**detection["drone"]),
+            face=FaceDetectionConfig(**detection["face"]),
+            object=ObjectDetectionConfig(**detection["object"]),
+            remote=RemoteInferenceConfig(**detection.get("remote", {})),
+        ),
         tracking=TrackingConfig(**raw["tracking"]),
         control=ControlConfig(**raw["control"]),
         servos=ServoConfig(**raw["servos"]),

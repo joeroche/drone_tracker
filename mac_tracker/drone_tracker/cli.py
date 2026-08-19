@@ -9,7 +9,7 @@ from .command_client import TrackerCommandClient
 from .config import load_calibration, load_config
 from .control import ProportionalController
 from .debug_view import draw_debug
-from .detector import YoloDetector
+from .detectors.factory import make_detector
 from .lock import LockTracker
 from .predictor import KalmanCenterTracker
 from .streams import make_frame_source
@@ -26,8 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = load_config(args.config)
     calibration = load_calibration(cfg.calibration.path)
-    offset_x = float(calibration.get("laser_offset_x_px", cfg.calibration.laser_offset_x_px))
-    offset_y = float(calibration.get("laser_offset_y_px", cfg.calibration.laser_offset_y_px))
+    offset_x = float(calibration.get("alignment_offset_x_px", cfg.calibration.alignment_offset_x_px))
+    offset_y = float(calibration.get("alignment_offset_y_px", cfg.calibration.alignment_offset_y_px))
 
     source = make_frame_source(
         cfg.camera.mode,
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg.camera.reconnect_delay_s,
         cfg.camera.max_fps,
     )
-    detector = YoloDetector(cfg.model.path, cfg.model.imgsz, cfg.model.confidence, cfg.model.iou, cfg.model.device, cfg.model.class_name)
+    detector = make_detector(cfg.detection)
     predictor = KalmanCenterTracker()
     controller = ProportionalController(cfg.control, cfg.servos, cfg.tracking.smoothing_alpha)
     lock_tracker = LockTracker(cfg.tracking.deadband_px, cfg.tracking.lock_duration_s, cfg.tracking.unlock_grace_s)
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             if frame_t - last_command_s >= command_interval_s:
                 last_command_s = frame_t
                 if not args.dry_run:
-                    client.send_target(command, lock.locked, aux=False)
+                    client.send_target(command, lock.locked)
 
             if cfg.debug.print_status_hz > 0 and frame_t - last_status_s >= 1.0 / cfg.debug.print_status_hz:
                 last_status_s = frame_t

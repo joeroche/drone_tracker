@@ -25,7 +25,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg.camera.reconnect_delay_s,
         cfg.camera.max_fps,
     )
-    detector = YoloDetector(cfg.model.path, cfg.model.imgsz, cfg.model.confidence, cfg.model.iou, cfg.model.device, cfg.model.class_name)
+    drone = cfg.detection.drone
+    detector = YoloDetector(drone.path, drone.imgsz, drone.confidence, drone.iou, drone.device, drone.class_name)
     neutral = ServoCommand(cfg.servos.pan_center_deg, cfg.servos.tilt_center_deg)
     for frame, _frame_t in source.frames():
         detections = detector.detect(frame)

@@ -20,3 +20,4 @@ firmware/**/wifi_secrets.h
 captures/
 logs/
 models/
+artifacts/
