@@ -8,7 +8,6 @@ static const int SERVER_PORT = 5006;
 static const int PAN_SERVO_PIN = 18;
 static const int TILT_SERVO_PIN = 19;
 static const int LOCK_LED_PIN = 23;
-static const int AUX_OUTPUT_PIN = 25;
 
 static const int SERVO_MIN_US = 500;
 static const int SERVO_MAX_US = 2500;
@@ -23,6 +22,22 @@ static const uint32_t HEARTBEAT_TIMEOUT_MS = 750;
 static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 30000;
 static const size_t RX_BUFFER_SIZE = 384;
 
+#ifndef WIFI_USE_STATIC_IP
+#define WIFI_USE_STATIC_IP 0
+#endif
+
+#ifndef WIFI_LOCAL_IP
+#define WIFI_LOCAL_IP IPAddress(192, 168, 4, 20)
+#endif
+
+#ifndef WIFI_GATEWAY
+#define WIFI_GATEWAY IPAddress(192, 168, 4, 1)
+#endif
+
+#ifndef WIFI_SUBNET
+#define WIFI_SUBNET IPAddress(255, 255, 255, 0)
+#endif
+
 static WiFiServer server(SERVER_PORT);
 static WiFiClient client;
 static Servo panServo;
@@ -33,7 +48,6 @@ static float currentTiltDeg = TILT_CENTER_DEG;
 static float targetPanDeg = PAN_CENTER_DEG;
 static float targetTiltDeg = TILT_CENTER_DEG;
 static bool lockLedOn = false;
-static bool auxOutputOn = false;
 static uint32_t lastCommandMs = 0;
 static uint32_t lastMotionMs = 0;
 static char rxBuffer[RX_BUFFER_SIZE];
@@ -57,17 +71,15 @@ static float moveToward(float current, float target, float maxDelta) {
   return current + (delta > 0.0f ? maxDelta : -maxDelta);
 }
 
-static void writeStatusOutputs() {
+static void writeLockLed() {
   digitalWrite(LOCK_LED_PIN, lockLedOn ? HIGH : LOW);
-  digitalWrite(AUX_OUTPUT_PIN, auxOutputOn ? HIGH : LOW);
 }
 
 static void centerTargets() {
   targetPanDeg = PAN_CENTER_DEG;
   targetTiltDeg = TILT_CENTER_DEG;
   lockLedOn = false;
-  auxOutputOn = false;
-  writeStatusOutputs();
+  writeLockLed();
 }
 
 static void sendStatus(WiFiClient &out) {
@@ -78,7 +90,6 @@ static void sendStatus(WiFiClient &out) {
   doc["target_pan"] = targetPanDeg;
   doc["target_tilt"] = targetTiltDeg;
   doc["lock"] = lockLedOn;
-  doc["aux"] = auxOutputOn;
   doc["uptime_ms"] = millis();
   serializeJson(doc, out);
   out.print('\n');
@@ -136,11 +147,7 @@ static void handleCommandLine(const char *line) {
   if (doc["lock"].is<bool>()) {
     lockLedOn = doc["lock"].as<bool>();
   }
-  if (doc["aux"].is<bool>()) {
-    auxOutputOn = doc["aux"].as<bool>();
-  }
-
-  writeStatusOutputs();
+  writeLockLed();
   if (client && client.connected()) {
     sendStatus(client);
   }
@@ -149,6 +156,12 @@ static void handleCommandLine(const char *line) {
 static bool connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
+#if WIFI_USE_STATIC_IP
+  if (!WiFi.config(WIFI_LOCAL_IP, WIFI_GATEWAY, WIFI_SUBNET)) {
+    Serial.println("wifi static ip config failed");
+    return false;
+  }
+#endif
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   Serial.print("wifi connecting");
@@ -192,8 +205,7 @@ static void checkHeartbeat() {
   }
 
   lockLedOn = false;
-  auxOutputOn = false;
-  writeStatusOutputs();
+  writeLockLed();
 }
 
 static void readClientLines() {
@@ -249,8 +261,7 @@ void setup() {
   Serial.println("ESP32 pan tilt tracker controller");
 
   pinMode(LOCK_LED_PIN, OUTPUT);
-  pinMode(AUX_OUTPUT_PIN, OUTPUT);
-  writeStatusOutputs();
+  writeLockLed();
 
   panServo.setPeriodHertz(50);
   tiltServo.setPeriodHertz(50);

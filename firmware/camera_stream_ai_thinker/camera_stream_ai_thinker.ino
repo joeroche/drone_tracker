@@ -31,6 +31,30 @@ static const uint32_t TCP_MAGIC = 0x44534A50UL;
 static const uint8_t TCP_VERSION = 1;
 static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 30000;
 
+#ifndef WIFI_AP_MODE
+#define WIFI_AP_MODE 0
+#endif
+
+#ifndef WIFI_AP_CHANNEL
+#define WIFI_AP_CHANNEL 6
+#endif
+
+#ifndef WIFI_AP_MAX_CONNECTIONS
+#define WIFI_AP_MAX_CONNECTIONS 4
+#endif
+
+#ifndef WIFI_AP_IP
+#define WIFI_AP_IP IPAddress(192, 168, 4, 1)
+#endif
+
+#ifndef WIFI_AP_GATEWAY
+#define WIFI_AP_GATEWAY IPAddress(192, 168, 4, 1)
+#endif
+
+#ifndef WIFI_AP_SUBNET
+#define WIFI_AP_SUBNET IPAddress(255, 255, 255, 0)
+#endif
+
 static WiFiServer tcpServer(TCP_JPEG_PORT);
 static httpd_handle_t streamServer = nullptr;
 static uint32_t frameSequence = 0;
@@ -38,6 +62,14 @@ static uint32_t frameSequence = 0;
 static const char *STREAM_BOUNDARY = "123456789000000000000987654321";
 static const char *STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=123456789000000000000987654321";
 static const char *STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Sequence: %u\r\nX-Timestamp-Us: %llu\r\n\r\n";
+
+static IPAddress localNetworkIp() {
+#if WIFI_AP_MODE
+  return WiFi.softAPIP();
+#else
+  return WiFi.localIP();
+#endif
+}
 
 static void writeUint32(WiFiClient &client, uint32_t value) {
   uint8_t bytes[4] = {
@@ -164,7 +196,7 @@ static void startMjpegServer() {
   config.server_port = MJPEG_PORT;
   config.ctrl_port = MJPEG_PORT + 1;
 
-  httpd_uri_t streamUri;
+  httpd_uri_t streamUri = {};
   streamUri.uri = "/stream";
   streamUri.method = HTTP_GET;
   streamUri.handler = streamHandler;
@@ -172,13 +204,26 @@ static void startMjpegServer() {
 
   if (httpd_start(&streamServer, &config) == ESP_OK) {
     httpd_register_uri_handler(streamServer, &streamUri);
-    Serial.printf("mjpeg stream ready: http://%s:%d/stream\n", WiFi.localIP().toString().c_str(), MJPEG_PORT);
+    Serial.printf("mjpeg stream ready: http://%s:%d/stream\n", localNetworkIp().toString().c_str(), MJPEG_PORT);
   } else {
     Serial.println("mjpeg server failed");
   }
 }
 
 static bool connectWifi() {
+#if WIFI_AP_MODE
+  WiFi.mode(WIFI_AP);
+  WiFi.setSleep(false);
+  WiFi.softAPConfig(WIFI_AP_IP, WIFI_AP_GATEWAY, WIFI_AP_SUBNET);
+  if (!WiFi.softAP(WIFI_SSID, WIFI_PASSWORD, WIFI_AP_CHANNEL, 0, WIFI_AP_MAX_CONNECTIONS)) {
+    Serial.println("wifi ap start failed");
+    return false;
+  }
+
+  Serial.print("wifi ap ready: ");
+  Serial.println(WiFi.softAPIP());
+  return true;
+#else
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -199,6 +244,7 @@ static bool connectWifi() {
   Serial.print("wifi connected: ");
   Serial.println(WiFi.localIP());
   return true;
+#endif
 }
 
 static void serveTcpJpegClient(WiFiClient &client) {
@@ -258,7 +304,7 @@ void setup() {
   if (ENABLE_TCP_JPEG_STREAM) {
     tcpServer.begin();
     tcpServer.setNoDelay(true);
-    Serial.printf("tcp jpeg stream ready: %s:%d\n", WiFi.localIP().toString().c_str(), TCP_JPEG_PORT);
+    Serial.printf("tcp jpeg stream ready: %s:%d\n", localNetworkIp().toString().c_str(), TCP_JPEG_PORT);
   }
 }
 
