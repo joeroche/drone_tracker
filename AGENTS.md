@@ -2,18 +2,19 @@
 
 ## Project Purpose
 
-This repository is a safe visual tracking prototype. It uses an AI Thinker ESP32-CAM for video, a second ESP32 for pan and tilt control, and a Mac host for detection, prediction, calibration, and lock LED control.
+This repository is a visual tracking prototype. It uses an AI Thinker ESP32-CAM for video, a second ESP32 for pan and tilt control, and a Mac host for detection, prediction, calibration, and lock LED control.
 
-The project must not add solenoid control, launcher control, autonomous firing logic, or code that energizes a release mechanism. Lock indication is LED status only.
+The hardware scope is limited to camera streaming, pan and tilt servos, and LED status.
 
 ## Workflow
 
 1. Prefer small commits with one concern per commit.
-2. Follow `/Users/joeroche/Developer/COMMIT_GUIDE.log` for commit messages.
+2. Use short conventional commit subjects that describe intent.
 3. Use Arduino CLI for firmware compile checks.
 4. Keep sketches compatible with Arduino IDE.
 5. Keep Mac code testable without attached hardware.
 6. Do not commit local WiFi secrets, calibration output, captures, logs, or model weights.
+7. Keep each commit to one concern, use ASCII, and omit tooling attribution and co-author trailers.
 
 ## Code Style
 
@@ -41,6 +42,4 @@ Tracker ESP32 defaults:
 1. Pan servo signal on GPIO 18.
 2. Tilt servo signal on GPIO 19.
 3. Lock LED signal on GPIO 23.
-4. Auxiliary output on GPIO 25.
-
 Use external servo power and common ground.
