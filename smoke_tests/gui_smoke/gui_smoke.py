@@ -19,6 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="config/default.yaml")
     parser.add_argument("--screenshots", default="artifacts/gui_smoke")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--browser-executable",
+        help="optional Chromium executable for environments without Playwright's bundled browser",
+    )
     return parser
 
 
@@ -47,7 +51,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         try:
             _wait_for_server(args.port)
-            _capture_with_playwright(args.port, fixture_dir, screenshots)
+            _capture_with_playwright(
+                args.port,
+                fixture_dir,
+                screenshots,
+                args.browser_executable,
+            )
         finally:
             proc.terminate()
             try:
@@ -70,14 +79,22 @@ def _wait_for_server(port: int) -> None:
     raise RuntimeError("GUI server did not start")
 
 
-def _capture_with_playwright(port: int, fixture_dir: Path, screenshots: Path) -> None:
+def _capture_with_playwright(
+    port: int,
+    fixture_dir: Path,
+    screenshots: Path,
+    browser_executable: str | None,
+) -> None:
     try:
         from playwright.sync_api import sync_playwright
     except Exception as exc:
         raise RuntimeError("playwright is required for screenshot smoke tests") from exc
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        launch_options = {}
+        if browser_executable:
+            launch_options["executable_path"] = browser_executable
+        browser = p.chromium.launch(**launch_options)
         page = browser.new_page(viewport={"width": 1440, "height": 960})
         page.goto(f"http://127.0.0.1:{port}", wait_until="networkidle")
         page.screenshot(path=str(screenshots / "01_drone_boot.png"), full_page=True)
