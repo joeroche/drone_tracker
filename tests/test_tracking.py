@@ -8,11 +8,16 @@ from drone_tracker.tracking import KltBoxTracker, clamp_box, translate_box
 
 def test_translate_box_clamps_to_frame() -> None:
     assert translate_box((80, 40, 120, 80), 10, -50, 100, 100) == (
-        90.0,
+        59.0,
         0.0,
         99.0,
-        30.0,
+        40.0,
     )
+
+
+def test_translate_box_preserves_size_at_frame_edge() -> None:
+    translated = translate_box((20, 30, 60, 70), 100, 100, 100, 100)
+    assert translated == (59.0, 59.0, 99.0, 99.0)
 
 
 def test_clamp_box_uses_pixel_bounds() -> None:

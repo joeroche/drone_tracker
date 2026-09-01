@@ -19,31 +19,17 @@ repository does not claim a measured latency or accuracy benchmark.
 
 ## System at a glance
 
-```text
-AI Thinker ESP32-CAM
-  camera: OV2640 -> QVGA JPEG at 10 fps
-  network: Wi-Fi AP "DroneTracker" -> 192.168.4.1:5005
-  transport: [0xFF 0xAA | uint32_le JPEG length | JPEG bytes]
-        |
-        v
-Mac receiver thread -> one-frame queue (older frames are discarded)
-        |
-        +-> refresh frame -> Grounding DINO Tiny on PyTorch MPS
-        |                    text prompt -> highest-confidence box
-        |
-        +-> intermediate frame -> Shi-Tomasi points inside last box
-                                 -> pyramidal KLT optical flow
-                                 -> median point displacement -> translated box
-        |
-        v
-EMA-smoothed box-center error -> pan/tilt angles
-        |
-        v
-[0xBB 0xCC | uint8 pan | uint8 tilt] over the same TCP socket
-        |
-        v
-ESP32-CAM GPIO 14/15 -> pan and tilt servos
-```
+The AI Thinker ESP32-CAM creates the `DroneTracker` access point, captures QVGA
+JPEG frames, and sends length-prefixed images to a Mac over one TCP connection.
+A receiver thread keeps only the newest complete frame, preventing detector
+latency from building a stale-image backlog.
+
+Grounding DINO Tiny periodically localizes the prompted target. Between those
+refreshes, Shi-Tomasi features inside the target box are propagated with
+pyramidal KLT optical flow, and the median surviving displacement translates
+the box. The Mac converts box-center error into bounded pan/tilt angles and
+returns a four-byte command over the same socket; the same ESP32-CAM drives both
+servos on GPIO 14 and GPIO 15.
 
 The detector is pinned to
 [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny),
@@ -102,9 +88,9 @@ firmware compilation, model caching, and the ordered bring-up procedure.
 
 ## Mechanical revision
 
-![improved 3D printed mount.](media/improved-3d-printed-mount.jpg)
+![Improved 3D printed mount.](media/improved-3d-printed-mount.jpg)
 
-*improved 3D printed mount.*
+*Improved 3D printed mount.*
 
 ## License
 

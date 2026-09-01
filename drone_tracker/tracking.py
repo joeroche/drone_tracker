@@ -23,7 +23,16 @@ def clamp_box(box: Box, width: int, height: int) -> Box:
 
 def translate_box(box: Box, dx: float, dy: float, width: int, height: int) -> Box:
     x1, y1, x2, y2 = box
-    return clamp_box((x1 + dx, y1 + dy, x2 + dx, y2 + dy), width, height)
+    box_width = min(x2 - x1, float(width - 1))
+    box_height = min(y2 - y1, float(height - 1))
+    translated_x1 = max(0.0, min(float(width - 1) - box_width, x1 + dx))
+    translated_y1 = max(0.0, min(float(height - 1) - box_height, y1 + dy))
+    return (
+        translated_x1,
+        translated_y1,
+        translated_x1 + box_width,
+        translated_y1 + box_height,
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -90,8 +99,17 @@ class KltBoxTracker:
             self.clear(gray)
             return KltUpdate(None, None)
 
-        valid = status.reshape(-1) == 1
-        new = next_points.reshape(-1, 2)[valid]
+        candidate_points = next_points.reshape(-1, 2)
+        height, width = gray.shape[:2]
+        valid = (
+            (status.reshape(-1) == 1)
+            & np.isfinite(candidate_points).all(axis=1)
+            & (candidate_points[:, 0] >= 0)
+            & (candidate_points[:, 0] < width)
+            & (candidate_points[:, 1] >= 0)
+            & (candidate_points[:, 1] < height)
+        )
+        new = candidate_points[valid]
         old = self.points.reshape(-1, 2)[valid]
         if len(new) < self.settings.lk_min_points:
             self.clear(gray)
@@ -100,7 +118,6 @@ class KltBoxTracker:
         displacement = new - old
         dx = float(np.median(displacement[:, 0]))
         dy = float(np.median(displacement[:, 1]))
-        height, width = gray.shape[:2]
         self.box = translate_box(self.box, dx, dy, width, height)
         self.points = new.reshape(-1, 1, 2)
         self.previous_gray = gray.copy()

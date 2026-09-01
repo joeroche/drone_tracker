@@ -29,3 +29,11 @@ def test_offsets_and_limits_are_applied() -> None:
     assert command is not None
     assert command.pan == 180
     assert command.tilt == 152
+
+
+def test_dead_zone_is_applied_per_axis() -> None:
+    settings = replace(Settings(), servo_error_alpha=1.0, servo_dead_zone_px=10.0)
+    command = AlignmentController(settings).command((156, 200, 176, 220), 320, 240)
+    assert command is not None
+    assert command.pan == 90
+    assert command.tilt == 158

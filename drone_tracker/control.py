@@ -43,14 +43,21 @@ class AlignmentController:
             self.filtered_error_x = alpha * error_x + (1.0 - alpha) * self.filtered_error_x
             self.filtered_error_y = alpha * error_y + (1.0 - alpha) * self.filtered_error_y
 
-        if (
-            abs(self.filtered_error_x) <= self.settings.servo_dead_zone_px
-            and abs(self.filtered_error_y) <= self.settings.servo_dead_zone_px
-        ):
+        effective_error_x = (
+            0.0
+            if abs(self.filtered_error_x) <= self.settings.servo_dead_zone_px
+            else self.filtered_error_x
+        )
+        effective_error_y = (
+            0.0
+            if abs(self.filtered_error_y) <= self.settings.servo_dead_zone_px
+            else self.filtered_error_y
+        )
+        if effective_error_x == 0.0 and effective_error_y == 0.0:
             return None
 
-        normalized_x = self.filtered_error_x / (frame_width * 0.5)
-        normalized_y = self.filtered_error_y / (frame_height * 0.5)
+        normalized_x = effective_error_x / (frame_width * 0.5)
+        normalized_y = effective_error_y / (frame_height * 0.5)
         pan = clamp_int(
             self.settings.servo_center_deg
             + normalized_x * 90.0
