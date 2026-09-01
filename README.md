@@ -1,27 +1,37 @@
 # Drone Tracker
 
-A dual-ESP32 vision system that streams camera frames to a Mac, estimates a
-target's motion, and drives a two-servo pan/tilt mount. The ESP32-CAM handles
-capture and transport; the Mac runs detection, prediction, calibration, and
-control; a second ESP32 enforces the actuator limits and reports visual lock
-with an LED.
+A vision-guided pan/tilt prototype built around an ESP32-CAM and a Mac inference
+host. The demonstrated first generation used Grounding DINO detections to seed
+KLT optical flow, then aligned the camera from the tracked box center. This
+repository also contains a later dual-ESP32 revision that separates camera
+transport from actuator control; that revision is implemented and
+software-tested, but an integrated physical build is not demonstrated here.
 
 **[Watch the hardware prototype track a target on YouTube](https://youtu.be/l-cdVXwM77g).**
-The video uses an earlier mount revision; the improved printed mount is shown
+The video shows the earlier **single-ESP32-CAM** implementation, not the current
+dual-ESP32 system. Grounding DINO created and periodically refreshed the target
+bounding box; Shi-Tomasi features were seeded inside that box, and pyramidal
+Lucas-Kanade optical flow propagated the feature points and translated the box
+between inference passes. The box-center error drove camera alignment. The
+video also uses the earlier mount revision; the improved printed mount is shown
 at the end of this README.
 
 ## Main limitation
 
-I deliberately ran inference on my Mac instead of renting a GPU server to test
-the practical limits of local inference. That decision made model inference the
-system's largest constraint: frame rate and response latency depend on whether
-PyTorch can use Apple Metal (`mps`) or must fall back to CPU, and heavier models
-reduce control-loop responsiveness. A CUDA-capable inference host should allow
-higher detector throughput, larger models, and lower latency, but those gains
-have not been benchmarked in this repository. The optional remote path exists
-to test that upgrade without moving prediction or actuator control off the Mac.
+I deliberately ran Grounding DINO on my Mac instead of renting a GPU server to
+test the practical limits of local inference. It could not refresh the box at
+the camera frame rate, so KLT filled the gaps between model passes. That made
+inference latency the prototype's largest constraint and allowed optical-flow
+error to accumulate before the next Grounding DINO correction. A CUDA-capable
+inference host should support more frequent box refreshes and less accumulated
+drift, but those gains have not been benchmarked here. The current repository's
+optional remote path tests that upgrade while keeping prediction and actuator
+control on the Mac.
 
-## Implemented pipeline
+## Later dual-ESP32 implementation
+
+The following is the checked-in second-generation architecture, not the
+hardware configuration shown in the video.
 
 ```text
 OV2640 camera
@@ -70,6 +80,10 @@ remain local.
   reporting without opening the controller socket.
 - The servos use an external 5-6 V supply with a common ground; they are not
   powered from the ESP32 regulator.
+
+These behaviors are supported by the implementation and hardware-independent
+tests. This repository does not claim an end-to-end physical validation of the
+dual-ESP32 revision.
 
 ## Run and verify
 
