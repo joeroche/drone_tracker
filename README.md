@@ -1,153 +1,107 @@
 # Drone Tracker
 
-Dual ESP32 visual tracking prototype with a local Mac control surface.
+A dual-ESP32 vision system that streams camera frames to a Mac, estimates a
+target's motion, and drives a two-servo pan/tilt mount. The ESP32-CAM handles
+capture and transport; the Mac runs detection, prediction, calibration, and
+control; a second ESP32 enforces the actuator limits and reports visual lock
+with an LED.
 
-The system streams video from an AI Thinker ESP32-CAM, runs configurable
-computer vision on a Mac or inference host, and sends bounded pan and tilt
-commands to a second ESP32. An LED reports stable visual lock. Hardware control
-is limited to the two servos and LED.
+**[Watch the hardware prototype track a target on YouTube](https://youtu.be/l-cdVXwM77g).**
+The video uses an earlier mount revision; the improved printed mount is shown
+at the end of this README.
 
-![Live tracking in the browser control surface](media/gui/live-tracking.png)
+## Main limitation
 
-The deterministic GUI smoke fixture above exercises the detector overlay,
-predicted alignment point, dry-run controls, live state, and event stream. It is
-software evidence, not a physical-accuracy benchmark.
+I deliberately ran inference on my Mac instead of renting a GPU server to test
+the practical limits of local inference. That decision made model inference the
+system's largest constraint: frame rate and response latency depend on whether
+PyTorch can use Apple Metal (`mps`) or must fall back to CPU, and heavier models
+reduce control-loop responsiveness. A CUDA-capable inference host should allow
+higher detector throughput, larger models, and lower latency, but those gains
+have not been benchmarked in this repository. The optional remote path exists
+to test that upgrade without moving prediction or actuator control off the Mac.
 
-## What It Demonstrates
-
-- MJPEG and framed TCP camera streaming from an ESP32-CAM
-- Drone, enrolled object, and enrolled face detection modes
-- Kalman prediction, deadband control, smoothing, and stale-frame handling
-- Firmware-enforced servo limits, slew limits, and heartbeat timeout
-- Browser GUI with live state, enrollment review, dry-run control, and events
-- Optional remote inference while controller output stays on the Mac
-- Reproducible CAD for the printed tracking mount
-
-## Architecture
+## Implemented pipeline
 
 ```text
-ESP32-CAM -> video -> Mac host -> detections -> prediction and control
-                                      |
-                                      +-> browser GUI and status events
-                                      |
-                                      +-> pan, tilt, and LED -> tracker ESP32
-
-Optional inference host <- JPEG frames and profile selection -> detections
+OV2640 camera
+  -> AI Thinker ESP32-CAM: VGA JPEG
+       PSRAM path: two frame buffers, grab-latest; fallback: one DRAM buffer
+  -> HTTP MJPEG :81/stream (default)
+     or TCP :5005 [magic | version | sequence | timestamp_us | JPEG length | JPEG]
+  -> Mac host: OpenCV JPEG decode, rate-limited to 12 frames/s
+  -> detector (one selected mode)
+       drone: custom Ultralytics YOLO weights, 512 px, conf 0.35, IoU 0.50
+       object: YOLO-World proposals -> crop quality -> color-histogram identity
+               match -> optional ORB verification -> 3-frame stability gate
+       face: InsightFace embedding match (OpenCV Haar/color fallback)
+  -> highest-confidence box center
+  -> constant-velocity Kalman state [cx, cy, vx, vy]
+       process variance 120; measurement variance 900; prediction held 250 ms
+  -> calibrated image-center error [ex, ey]
+  -> proportional pan/tilt control: 0.035 deg/px, 2 deg max step, alpha 0.45
+  -> newline-delimited JSON over TCP :5006, capped at 20 commands/s
+  -> tracker ESP32: angle clamp -> 180 deg/s slew limit -> 50 Hz servo PWM
+       pan 30-150 deg | tilt 45-135 deg | lock LED timeout 750 ms
 ```
 
-The Mac owns prediction, calibration, servo limits, lock timing, dry-run state,
-and all commands sent to the tracker controller. The optional inference service
-returns detections only.
+The lock state requires the predicted target center to remain within a 24-pixel
+deadband for 1 second; it clears after 350 ms outside the deadband. If detection
+drops briefly, the Kalman prediction continues for at most 250 ms. Calibration
+stores an image-space offset so the control target can be aligned with the
+physical mount rather than assuming the optical center is mechanically exact.
 
-## Development Evolution
+The localhost FastAPI GUI exposes REST controls, an annotated MJPEG feed at
+`/api/video.mjpg`, and state/movement events over the `/api/events` WebSocket.
 
-The first prototype used one ESP32-CAM as a WiFi access point with a framed,
-bidirectional TCP connection. A one-frame host queue discarded stale camera
-frames, periodic YOLOE detections re-seeded LK optical flow, and the host sent
-bounded servo angles back over the same connection. The project briefly tested
-HTTP streaming and UDP packetization before returning to framed TCP, separated
-servo power to prevent brownouts, and ultimately moved pan and tilt control to a
-second ESP32.
+For remote inference, the Mac recompresses each frame as JPEG quality 80 and
+sends `frame`, `mode`, and `profile_id` to `POST /infer` with a 250 ms timeout.
+The FastAPI service returns bounding boxes and scores only. Kalman state,
+deadband timing, dry-run state, servo commands, and the browser event stream
+remain local.
 
-The current implementation replaces the early single-board tracking loop with
-configurable detection backends, Kalman prediction, a browser control surface,
-firmware-enforced motion limits, and an optional detection-only inference host.
+## Safety and failure behavior
 
-![First successful ESP32-CAM firmware boot over a USB serial adapter](media/prototype/esp32-cam-first-boot.jpg)
+- The Mac clamps each control update before transmission; the tracker firmware
+  independently clamps received target angles and rate-limits physical motion.
+- Commands and status use newline-delimited JSON over a dedicated TCP socket.
+  A 750 ms command timeout turns off the lock LED.
+- Dry-run mode exercises capture, inference, prediction, the GUI, and event
+  reporting without opening the controller socket.
+- The servos use an external 5-6 V supply with a common ground; they are not
+  powered from the ESP32 regulator.
 
-This first-boot image is preserved from slide 6 of the original project
-presentation. It documents the hardware bring-up stage without exposing the
-presentation's unrelated framing or personal desktop content.
-
-## Repository Map
-
-| Path | Purpose |
-| --- | --- |
-| `firmware/camera_stream_ai_thinker` | Camera capture, MJPEG, and TCP JPEG streaming |
-| `firmware/tracker_controller` | Pan, tilt, LED, limits, and heartbeat handling |
-| `mac_tracker/drone_tracker` | Detection, prediction, control, enrollment, GUI, and inference API |
-| `config` | Safe versioned configuration examples |
-| `smoke_tests` | Incremental software and hardware checks |
-| `tests` | Hardware-independent Python test suite |
-| `cad` | Printable mount and source STEP model |
-| `BUILD.md` | Setup, wiring, operation, and verification |
-
-## Interface Evidence
-
-### Object Enrollment
-
-The object workflow builds a local identity profile from accepted crops while
-keeping the controller in dry-run mode.
-
-![Object enrollment review with three accepted crops](media/gui/object-enrollment.png)
-
-### Identity Tracking
-
-After enrollment, the selected profile drives the live detector while the GUI
-continues to expose tracking, controller, lock, and pan/tilt state.
-
-![Live object-profile tracking in the browser GUI](media/gui/object-live.png)
-
-### Mobile Layout
-
-The same controls and state remain available in the narrow responsive layout.
-
-<img src="media/gui/mobile-layout.png" alt="Responsive mobile tracker interface" width="320">
-
-## Mechanical Design
-
-The repository retains the original STEP assembly and four printable 3MF
-components. This preview was rendered directly from those checked-in exports.
-
-![Four printable tracking-mount components](media/cad/printed-components.png)
-
-## Quick Start
+## Run and verify
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
 cp config/default.yaml config/local.yaml
 .venv/bin/drone-tracker-gui config/local.yaml --mock
-```
-
-Open `http://127.0.0.1:8765`. Mock mode exercises the full local UI without
-camera, controller, or model files. See [BUILD.md](BUILD.md) for hardware setup.
-
-## Verification
-
-```sh
 python3 -m pytest -q
 tools/compile_arduino.sh
-python3 smoke_tests/gui_smoke/gui_smoke.py
 ```
 
-The Python tests run without attached hardware. Firmware checks require Arduino
-CLI plus the ESP32 platform and the libraries listed in [BUILD.md](BUILD.md).
-The GUI smoke test accepts `--browser-executable` when Playwright's bundled
-Chromium is unavailable.
+The mock GUI runs at `http://127.0.0.1:8765`. Model weights, enrollment
+profiles, credentials, calibration output, and hardware are intentionally not
+stored in Git. See [BUILD.md](BUILD.md) for wiring, flashing, calibration,
+remote-inference setup, and the ordered hardware smoke tests.
 
-## Demo Evidence
+| Area | Implementation |
+| --- | --- |
+| Camera firmware | [`firmware/camera_stream_ai_thinker`](firmware/camera_stream_ai_thinker) |
+| Pan/tilt firmware | [`firmware/tracker_controller`](firmware/tracker_controller) |
+| Host runtime | [`mac_tracker/drone_tracker/runtime.py`](mac_tracker/drone_tracker/runtime.py) |
+| Detection backends | [`mac_tracker/drone_tracker/detectors`](mac_tracker/drone_tracker/detectors) |
+| Prediction and control | [`predictor.py`](mac_tracker/drone_tracker/predictor.py), [`control.py`](mac_tracker/drone_tracker/control.py) |
+| Tests | [`tests`](tests), [`smoke_tests`](smoke_tests) |
+| Mechanical files | [`cad`](cad) - STEP assembly and four printable 3MF parts |
 
-### Earlier hardware revision
+## Mechanical revision
 
-[![Prototype hardware tracking demo](media/demo/prototype-tracking.jpg)](media/demo/prototype-tracking.mp4)
+![improved 3D printed mount.](media/improved-3d-printed-mount.jpg)
 
-The linked clip is an authentic tracking demo on an earlier hardware revision.
-The later iteration replaced that mount with the 3D-printed harness shown in
-the CAD preview above; this video does not claim to demonstrate the final
-mechanical configuration.
-
-The GUI captures are reproducible synthetic smoke-test artifacts. Together,
-the prototype video, first-boot photo, CAD, and current GUI evidence document
-working physical bring-up and the subsequent software and mechanical evolution.
-
-## Current Limits
-
-- Model weights and enrollment profiles are local artifacts and are not stored
-  in Git.
-- Live accuracy depends on the selected detector, model, camera placement, and
-  calibration. This repository does not claim a measured accuracy benchmark.
-- Hardware smoke tests require the two boards and external servo power.
+*improved 3D printed mount.*
 
 ## License
 
