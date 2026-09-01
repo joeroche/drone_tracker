@@ -1,114 +1,103 @@
 # Drone Tracker
 
-A vision-guided pan/tilt prototype built around an ESP32-CAM and a Mac inference
-host. The demonstrated first generation used Grounding DINO detections to seed
-KLT optical flow, then aligned the camera from the tracked box center. This
-repository also contains a later dual-ESP32 revision that separates camera
-transport from actuator control; that revision is implemented and
-software-tested, but an integrated physical build is not demonstrated here.
+An ESP32-CAM pan/tilt prototype that streams JPEG frames over its own Wi-Fi
+network, runs open-vocabulary detection on a Mac, and moves the camera to keep a
+text-prompted target near the image center.
 
-**[Watch the hardware prototype track a target on YouTube](https://youtu.be/l-cdVXwM77g).**
-The video shows the earlier **single-ESP32-CAM** implementation, not the current
-dual-ESP32 system. Grounding DINO created and periodically refreshed the target
-bounding box; Shi-Tomasi features were seeded inside that box, and pyramidal
-Lucas-Kanade optical flow propagated the feature points and translated the box
-between inference passes. The box-center error drove camera alignment. The
-video also uses the earlier mount revision; the improved printed mount is shown
-at the end of this README.
+**[Watch the hardware prototype track a target](https://youtu.be/l-cdVXwM77g).**
+The video shows this single-board architecture on the original mount.
 
 ## Main limitation
 
-I deliberately ran Grounding DINO on my Mac instead of renting a GPU server to
-test the practical limits of local inference. It could not refresh the box at
-the camera frame rate, so KLT filled the gaps between model passes. That made
-inference latency the prototype's largest constraint and allowed optical-flow
-error to accumulate before the next Grounding DINO correction. A CUDA-capable
-inference host should support more frequent box refreshes and less accumulated
-drift, but those gains have not been benchmarked here. The current repository's
-optional remote path tests that upgrade while keeping prediction and actuator
-control on the Mac.
+I deliberately ran inference on my Mac instead of renting a GPU server to test
+the practical limits of local inference. Grounding DINO could not run at the
+camera frame rate, so it periodically created or corrected the target box while
+pyramidal Lucas-Kanade optical flow propagated that box between model passes.
+This kept the loop responsive, but KLT can accumulate drift until the next
+detection. Faster GPU inference would permit more frequent corrections; this
+repository does not claim a measured latency or accuracy benchmark.
 
-## Later dual-ESP32 implementation
-
-The following is the checked-in second-generation architecture, not the
-hardware configuration shown in the video.
+## System at a glance
 
 ```text
-OV2640 camera
-  -> AI Thinker ESP32-CAM: VGA JPEG
-       PSRAM path: two frame buffers, grab-latest; fallback: one DRAM buffer
-  -> HTTP MJPEG :81/stream (default)
-     or TCP :5005 [magic | version | sequence | timestamp_us | JPEG length | JPEG]
-  -> Mac host: OpenCV JPEG decode, rate-limited to 12 frames/s
-  -> detector (one selected mode)
-       drone: custom Ultralytics YOLO weights, 512 px, conf 0.35, IoU 0.50
-       object: YOLO-World proposals -> crop quality -> color-histogram identity
-               match -> optional ORB verification -> 3-frame stability gate
-       face: InsightFace embedding match (OpenCV Haar/color fallback)
-  -> highest-confidence box center
-  -> constant-velocity Kalman state [cx, cy, vx, vy]
-       process variance 120; measurement variance 900; prediction held 250 ms
-  -> calibrated image-center error [ex, ey]
-  -> proportional pan/tilt control: 0.035 deg/px, 2 deg max step, alpha 0.45
-  -> newline-delimited JSON over TCP :5006, capped at 20 commands/s
-  -> tracker ESP32: angle clamp -> 180 deg/s slew limit -> 50 Hz servo PWM
-       pan 30-150 deg | tilt 45-135 deg | lock LED timeout 750 ms
+AI Thinker ESP32-CAM
+  camera: OV2640 -> QVGA JPEG at 10 fps
+  network: Wi-Fi AP "DroneTracker" -> 192.168.4.1:5005
+  transport: [0xFF 0xAA | uint32_le JPEG length | JPEG bytes]
+        |
+        v
+Mac receiver thread -> one-frame queue (older frames are discarded)
+        |
+        +-> refresh frame -> Grounding DINO Tiny on PyTorch MPS
+        |                    text prompt -> highest-confidence box
+        |
+        +-> intermediate frame -> Shi-Tomasi points inside last box
+                                 -> pyramidal KLT optical flow
+                                 -> median point displacement -> translated box
+        |
+        v
+EMA-smoothed box-center error -> pan/tilt angles
+        |
+        v
+[0xBB 0xCC | uint8 pan | uint8 tilt] over the same TCP socket
+        |
+        v
+ESP32-CAM GPIO 14/15 -> pan and tilt servos
 ```
 
-The lock state requires the predicted target center to remain within a 24-pixel
-deadband for 1 second; it clears after 350 ms outside the deadband. If detection
-drops briefly, the Kalman prediction continues for at most 250 ms. Calibration
-stores an image-space offset so the control target can be aligned with the
-physical mount rather than assuming the optical center is mechanically exact.
+The detector is pinned to
+[`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny),
+uses a 480-pixel short edge with a 640-pixel maximum edge, and selects Apple
+Metal (`mps`) automatically when available. PyTorch falls back to CPU for an
+unsupported MPS operation. The model is downloaded before joining the isolated
+ESP32 access point and then loaded from the local cache.
 
-The localhost FastAPI GUI exposes REST controls, an annotated MJPEG feed at
-`/api/video.mjpg`, and state/movement events over the `/api/events` WebSocket.
+Grounding DINO refreshes every 10 processed frames or immediately after KLT
+loses the target. Each refresh seeds at most 20 Shi-Tomasi corners inside the
+new box. KLT uses a 7 x 7 window and two pyramid levels; fewer than three
+surviving points invalidates the track and forces another detection.
 
-For remote inference, the Mac recompresses each frame as JPEG quality 80 and
-sends `frame`, `mode`, and `profile_id` to `POST /infer` with a 250 ms timeout.
-The FastAPI service returns bounding boxes and scores only. Kalman state,
-deadband timing, dry-run state, servo commands, and the browser event stream
-remain local.
+## Alignment and transport
 
-## Safety and failure behavior
+The Mac converts the tracked box center into normalized image error:
 
-- The Mac clamps each control update before transmission; the tracker firmware
-  independently clamps received target angles and rate-limits physical motion.
-- Commands and status use newline-delimited JSON over a dedicated TCP socket.
-  A 750 ms command timeout turns off the lock LED.
-- Dry-run mode exercises capture, inference, prediction, the GUI, and event
-  reporting without opening the controller socket.
-- The servos use an external 5-6 V supply with a common ground; they are not
-  powered from the ESP32 regulator.
+```text
+ex = (bbox_center_x - frame_center_x) / (frame_width / 2)
+ey = (bbox_center_y - frame_center_y) / (frame_height / 2)
 
-These behaviors are supported by the implementation and hardware-independent
-tests. This repository does not claim an end-to-end physical validation of the
-dual-ESP32 revision.
+pan  = clamp(90 + 90*EMA(ex) + pan_offset,  0, 180)
+tilt = clamp(90 + 90*EMA(ey) + tilt_offset, 0, 180)
+```
 
-## Run and verify
+The error EMA uses `alpha=0.40`; commands stop inside a 10-pixel dead zone.
+Frame parsing is self-synchronizing after partial or corrupt reads, rejects
+payloads over 200 kB, and preserves a split start marker across TCP chunks.
+
+## Run it
 
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"
-cp config/default.yaml config/local.yaml
-.venv/bin/drone-tracker-gui config/local.yaml --mock
-python3 -m pytest -q
-tools/compile_arduino.sh
+.venv/bin/drone-tracker-download-model
+
+# After flashing the firmware, join Wi-Fi "DroneTracker" with password "dronetrack"
+.venv/bin/drone-tracker --offline --device mps --prompt "a small drone"
 ```
 
-The mock GUI runs at `http://127.0.0.1:8765`. Model weights, enrollment
-profiles, credentials, calibration output, and hardware are intentionally not
-stored in Git. See [BUILD.md](BUILD.md) for wiring, flashing, calibration,
-remote-inference setup, and the ordered hardware smoke tests.
+Use `--no-servos` for vision-only testing. See [BUILD.md](BUILD.md) for wiring,
+firmware compilation, model caching, and the ordered bring-up procedure.
 
-| Area | Implementation |
+## Explore the implementation
+
+| Area | Start here |
 | --- | --- |
-| Camera firmware | [`firmware/camera_stream_ai_thinker`](firmware/camera_stream_ai_thinker) |
-| Pan/tilt firmware | [`firmware/tracker_controller`](firmware/tracker_controller) |
-| Host runtime | [`mac_tracker/drone_tracker/runtime.py`](mac_tracker/drone_tracker/runtime.py) |
-| Detection backends | [`mac_tracker/drone_tracker/detectors`](mac_tracker/drone_tracker/detectors) |
-| Prediction and control | [`predictor.py`](mac_tracker/drone_tracker/predictor.py), [`control.py`](mac_tracker/drone_tracker/control.py) |
-| Tests | [`tests`](tests), [`smoke_tests`](smoke_tests) |
+| Runtime loop | [`drone_tracker/app.py`](drone_tracker/app.py) |
+| Grounding DINO and MPS | [`drone_tracker/detector.py`](drone_tracker/detector.py) |
+| Shi-Tomasi and KLT | [`drone_tracker/tracking.py`](drone_tracker/tracking.py) |
+| TCP framing | [`drone_tracker/transport.py`](drone_tracker/transport.py) |
+| Alignment control | [`drone_tracker/control.py`](drone_tracker/control.py) |
+| ESP32-CAM firmware | [`firmware/esp32_cam_tracker`](firmware/esp32_cam_tracker) |
+| Protocol and timing | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Mechanical files | [`cad`](cad) - STEP assembly and four printable 3MF parts |
 
 ## Mechanical revision

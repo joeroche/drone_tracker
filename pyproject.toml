@@ -4,45 +4,28 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drone-tracker"
-version = "0.1.0"
-description = "Safe ESP32-CAM and pan tilt visual tracking prototype"
+version = "0.2.0"
+description = "Single-ESP32-CAM Grounding DINO and KLT pan-tilt tracker"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "fastapi>=0.115",
-  "numpy>=1.24",
-  "opencv-python>=4.8,<5",
-  "python-multipart>=0.0.9",
-  "PyYAML>=6.0",
-  "requests>=2.31",
-  "ultralytics>=8.3",
-  "uvicorn>=0.30"
+  "numpy>=1.26,<3",
+  "opencv-python>=4.9,<5",
+  "Pillow>=10,<13",
+  "torch>=2.4,<3",
+  "transformers>=4.46,<5",
 ]
 
 [project.optional-dependencies]
-face = [
-  "insightface>=0.7.3",
-  "onnxruntime>=1.19"
-]
-dev = [
-  "httpx>=0.27",
-  "playwright>=1.45",
-  "pytest>=8.0"
-]
+dev = ["pytest>=8,<10"]
 
 [project.scripts]
-drone-tracker = "drone_tracker.cli:main"
-drone-calibrate = "drone_tracker.calibrate_cli:main"
-drone-smoke-yolo = "drone_tracker.smoke_yolo:main"
-drone-tracker-gui = "drone_tracker.gui.app:main"
-drone-inference-server = "drone_tracker.inference_server:main"
+drone-tracker = "drone_tracker.app:main"
+drone-tracker-download-model = "drone_tracker.download_model:main"
 
 [tool.setuptools.packages.find]
-where = ["mac_tracker"]
-
-[tool.setuptools.package-data]
-drone_tracker = ["gui/static/*"]
+where = ["."]
+include = ["drone_tracker*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["mac_tracker"]

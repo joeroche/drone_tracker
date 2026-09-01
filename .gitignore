@@ -13,10 +13,6 @@ build/
 .arduino/
 .pio/
 
-config/local.yaml
-config/calibration.yaml
-firmware/**/wifi_secrets.h
-
 captures/
 logs/
 models/

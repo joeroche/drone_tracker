@@ -1,27 +1,31 @@
-from drone_tracker.config import ControlConfig, ServoConfig
-from drone_tracker.control import ProportionalController
-from drone_tracker.predictor import TrackState
+from dataclasses import replace
+
+from drone_tracker.config import Settings
+from drone_tracker.control import AlignmentController
 
 
-def test_controller_clamps_servo_range() -> None:
-    control = ControlConfig(
-        pan_gain_deg_per_px=10.0,
-        tilt_gain_deg_per_px=10.0,
-        max_step_deg=100.0,
-        invert_pan=False,
-        invert_tilt=False,
+def test_centered_box_is_inside_dead_zone() -> None:
+    controller = AlignmentController(Settings())
+    assert controller.command((120, 80, 200, 160), 320, 240) is None
+
+
+def test_box_error_maps_to_servo_angles() -> None:
+    settings = replace(Settings(), servo_error_alpha=1.0, servo_dead_zone_px=0.0)
+    command = AlignmentController(settings).command((240, 80, 320, 160), 320, 240)
+    assert command is not None
+    assert command.pan == 158
+    assert command.tilt == 90
+
+
+def test_offsets_and_limits_are_applied() -> None:
+    settings = replace(
+        Settings(),
+        servo_error_alpha=1.0,
+        servo_dead_zone_px=0.0,
+        pan_offset_deg=20.0,
+        tilt_offset_deg=-20.0,
     )
-    servos = ServoConfig(
-        pan_min_deg=80.0,
-        pan_center_deg=90.0,
-        pan_max_deg=100.0,
-        tilt_min_deg=70.0,
-        tilt_center_deg=90.0,
-        tilt_max_deg=95.0,
-    )
-    controller = ProportionalController(control, servos, smoothing_alpha=1.0)
-
-    command = controller.update(TrackState(cx=1000, cy=1000, vx=0, vy=0, age_s=0, has_measurement=True), 100, 100, 0, 0)
-
-    assert command.pan == 100.0
-    assert command.tilt == 95.0
+    command = AlignmentController(settings).command((300, 220, 319, 239), 320, 240)
+    assert command is not None
+    assert command.pan == 180
+    assert command.tilt == 152
