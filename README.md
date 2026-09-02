@@ -10,12 +10,12 @@ The video shows this single-board architecture on the original mount.
 ## Main limitation
 
 I deliberately ran inference on my Mac instead of renting a GPU server to test
-the practical limits of local inference. Grounding DINO could not run at the
+the practical limits of local inference (and save money). Grounding DINO could not run at the
 camera frame rate, so it periodically created or corrected the target box while
 pyramidal Lucas-Kanade optical flow propagated that box between model passes.
 This kept the loop responsive, but KLT can accumulate drift until the next
 detection. Faster GPU inference would permit more frequent corrections; this
-repository does not claim a measured latency or accuracy benchmark.
+repository does not claim a measured latency or accuracy benchmark as they would be too noisy anyway.
 
 ## System at a glance
 
