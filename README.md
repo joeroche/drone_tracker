@@ -86,11 +86,13 @@ firmware compilation, model caching, and the ordered bring-up procedure.
 | Protocol and timing | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Mechanical files | [`cad`](cad) - STEP assembly and four printable 3MF parts |
 
-## Mechanical revision
+## Revisions
 
 ![Improved 3D printed mount.](media/improved-3d-printed-mount.jpg)
 
-*Improved 3D printed mount.*
+*Improved 3D printed mount that was made after the demo.*
+
+This project could be vastly improved with GPU inference and a fine-tuned model for drones, but I lacked the resources at the time of production.
 
 ## License
 
