@@ -27,9 +27,8 @@ latency from building a stale-image backlog.
 Grounding DINO Tiny periodically localizes the prompted target. Between those
 refreshes, Shi-Tomasi features inside the target box are propagated with
 pyramidal KLT optical flow, and the median surviving displacement translates
-the box. The Mac converts box-center error into bounded pan/tilt angles and
-returns a four-byte command over the same socket; the same ESP32-CAM drives both
-servos on GPIO 14 and GPIO 15.
+the box. The system starts in calibration mode where you center the drone in its view while it makes micro-adjustments. Once calibrations are made, they are persistent until reset through serial. The Mac converts box-center error into bounded pan/tilt angles and
+returns a four-byte command over the same socket.
 
 The detector is pinned to
 [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny),
@@ -39,9 +38,8 @@ unsupported MPS operation. The model is downloaded before joining the isolated
 ESP32 access point and then loaded from the local cache.
 
 Grounding DINO refreshes every 10 processed frames or immediately after KLT
-loses the target. Each refresh seeds at most 20 Shi-Tomasi corners inside the
-new box. KLT uses a 7 x 7 window and two pyramid levels; fewer than three
-surviving points invalidates the track and forces another detection.
+loses the target. KLT uses a 7 x 7 window and two pyramid levels; fewer than three
+surviving points kills the track and forces another detection.
 
 ## Alignment and transport
 
