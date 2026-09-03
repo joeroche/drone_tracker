@@ -16,6 +16,8 @@ class Settings:
 
     tcp_host: str = "192.168.4.1"
     tcp_port: int = 5005
+    controller_host: str = "192.168.4.2"
+    controller_port: int = 5006
     reconnect_delay_s: float = 1.0
     socket_timeout_s: float = 5.0
     max_frame_bytes: int = 200_000

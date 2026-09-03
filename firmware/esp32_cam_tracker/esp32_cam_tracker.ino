@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
 #include <WiFi.h>
 #include "esp_camera.h"
 #include "camera_pins.h"
@@ -10,18 +9,9 @@ static const uint8_t AP_CHANNEL = 6;
 static const uint16_t TCP_PORT = 5005;
 static const uint8_t TARGET_FPS = 10;
 
-static const int PAN_SERVO_PIN = 14;
-static const int TILT_SERVO_PIN = 15;
-static const int SERVO_MIN_US = 500;
-static const int SERVO_MAX_US = 2500;
-
 static WiFiServer server(TCP_PORT);
 static WiFiClient client;
-static Servo panServo;
-static Servo tiltServo;
 static uint32_t lastFrameMs = 0;
-static uint8_t commandState = 0;
-static uint8_t pendingPan = 90;
 
 static bool writeAll(WiFiClient &out, const uint8_t *data, size_t length) {
   size_t sent = 0;
@@ -55,29 +45,6 @@ static bool sendFrame(WiFiClient &out) {
     && writeAll(out, frame->buf, frame->len);
   esp_camera_fb_return(frame);
   return ok;
-}
-
-static void consumeServoCommands(WiFiClient &input) {
-  while (input.available()) {
-    const uint8_t value = static_cast<uint8_t>(input.read());
-    switch (commandState) {
-      case 0:
-        commandState = value == 0xBB ? 1 : 0;
-        break;
-      case 1:
-        commandState = value == 0xCC ? 2 : (value == 0xBB ? 1 : 0);
-        break;
-      case 2:
-        pendingPan = value;
-        commandState = 3;
-        break;
-      case 3:
-        panServo.write(constrain(static_cast<int>(pendingPan), 0, 180));
-        tiltServo.write(constrain(static_cast<int>(value), 0, 180));
-        commandState = 0;
-        break;
-    }
-  }
 }
 
 static bool initializeCamera() {
@@ -118,13 +85,6 @@ void setup() {
     return;
   }
 
-  panServo.setPeriodHertz(50);
-  tiltServo.setPeriodHertz(50);
-  panServo.attach(PAN_SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
-  tiltServo.attach(TILT_SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
-  panServo.write(90);
-  tiltServo.write(90);
-
   WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
   if (!WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, 1)) {
@@ -147,11 +107,9 @@ void loop() {
       return;
     }
     client.setNoDelay(true);
-    commandState = 0;
     Serial.println("Mac connected");
   }
 
-  consumeServoCommands(client);
   const uint32_t nowMs = millis();
   if (nowMs - lastFrameMs >= 1000U / TARGET_FPS) {
     lastFrameMs = nowMs;
@@ -159,5 +117,4 @@ void loop() {
       client.stop();
     }
   }
-  consumeServoCommands(client);
 }

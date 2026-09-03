@@ -46,7 +46,7 @@ def encode_servo_command(pan: int, tilt: int) -> bytes:
 
 
 class TrackerConnection:
-    """Maintains the ESP32 socket and keeps only the newest complete JPEG."""
+    """Maintains the ESP32-CAM socket and keeps only the newest complete JPEG."""
 
     def __init__(
         self,
@@ -73,18 +73,6 @@ class TrackerConnection:
             return self.frames.get_nowait()
         except queue.Empty:
             return None
-
-    def send_servo(self, pan: int, tilt: int) -> bool:
-        payload = encode_servo_command(pan, tilt)
-        with self._socket_lock:
-            sock = self._socket
-        if sock is None:
-            return False
-        try:
-            sock.sendall(payload)
-            return True
-        except OSError:
-            return False
 
     def close(self) -> None:
         self._stop.set()
@@ -131,3 +119,44 @@ class TrackerConnection:
                         self._socket = None
                 if sock is not None:
                     sock.close()
+
+
+class ControllerConnection:
+    """Maintains the separate pan/tilt controller connection."""
+
+    def __init__(self, host: str, port: int, socket_timeout_s: float) -> None:
+        self.host = host
+        self.port = port
+        self.socket_timeout_s = socket_timeout_s
+        self._socket: socket.socket | None = None
+
+    def send_servo(self, pan: int, tilt: int) -> bool:
+        if not self._connect():
+            return False
+        try:
+            assert self._socket is not None
+            self._socket.sendall(encode_servo_command(pan, tilt))
+            return True
+        except OSError:
+            self.close()
+            return False
+
+    def close(self) -> None:
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
+
+    def _connect(self) -> bool:
+        if self._socket is not None:
+            return True
+        try:
+            self._socket = socket.create_connection(
+                (self.host, self.port), timeout=self.socket_timeout_s
+            )
+            self._socket.settimeout(self.socket_timeout_s)
+            self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            print(f"connected to tracker ESP32 at {self.host}:{self.port}")
+            return True
+        except OSError:
+            self._socket = None
+            return False

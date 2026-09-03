@@ -2,16 +2,15 @@
 
 ## Physical topology
 
-The AI Thinker ESP32-CAM is both the camera endpoint and actuator controller.
-It creates a WPA2 access point named `DroneTracker` on channel 6 with address
-`192.168.4.1`. The Mac joins that network and opens one TCP connection to port
-5005. No router, second ESP32, browser service, or remote inference server is
-part of this branch.
+The AI Thinker ESP32-CAM creates a WPA2 access point named `DroneTracker` on
+channel 6 with address `192.168.4.1`. The Mac and a second ESP32 join that
+network. The camera board streams frames to the Mac on port 5005; the controller
+board listens for pan/tilt commands at `192.168.4.2:5006`.
 
-The same socket is bidirectional:
+The two responsibilities use separate sockets:
 
-- ESP32-CAM to Mac: framed JPEG images.
-- Mac to ESP32-CAM: four-byte servo commands.
+- ESP32-CAM to Mac: framed JPEG images on port 5005.
+- Mac to controller ESP32: four-byte servo commands on port 5006.
 
 ## Wire protocols
 
@@ -39,8 +38,9 @@ offset  size  value
 3       1     tilt angle, uint8, clamped to 0-180
 ```
 
-The firmware consumes the byte stream with a four-state marker parser so a
-partial command is retained across loop iterations.
+The controller firmware consumes the byte stream with a four-state marker
+parser so a partial command is retained across loop iterations. If no complete
+command arrives for 750 ms, it returns both servos to center.
 
 ## Frame lifecycle
 
@@ -62,7 +62,7 @@ partial command is retained across loop iterations.
    Grounding DINO inference.
 7. An EMA with `alpha=0.40` filters horizontal and vertical box-center error.
    Outside a 10-pixel dead zone, normalized error maps to servo angles and the
-   four-byte command returns over the camera socket.
+   four-byte command is sent to the controller ESP32.
 
 Inference blocks the main processing loop, but it does not block the receiver
 thread. Frames arriving during inference replace one another in the one-slot
@@ -85,8 +85,8 @@ runtime uses `--offline` after the Mac joins the ESP32 access point.
 
 ## Limits
 
-- The video is evidence of the physical prototype, not a controlled latency or
-  accuracy benchmark.
+- The dual-board hardware integration remains unfinished and does not have a
+  completed demo or controlled latency or accuracy benchmark.
 - KLT assumes short-term appearance consistency and mostly translational box
   motion. Occlusion, scale change, blur, or weak corner texture can cause drift.
 - Servo mapping is proportional image alignment, not a dynamic plant model.

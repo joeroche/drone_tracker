@@ -1,14 +1,18 @@
 # Build and Run
 
+This guide covers the in-progress dual-ESP32 revision. The completed
+single-board bring-up remains on the `main` branch.
+
 ## Hardware
 
 - AI Thinker ESP32-CAM with OV2640 camera
+- ESP32 development board for pan and tilt control
 - USB-to-serial programmer for flashing
-- Two hobby servos on GPIO 14 and GPIO 15
+- Two hobby servos on controller GPIO 18 and GPIO 19
 - External regulated 5 V servo supply
-- Common ground between the servo supply and ESP32-CAM
+- Common ground between the servo supply and controller ESP32
 
-Do not power the servos from the ESP32-CAM regulator. Remove the servo horns for
+Do not power the servos from either ESP32 regulator. Remove the servo horns for
 the first command test if the mount can collide with its physical stops.
 
 ## Firmware toolchain
@@ -23,8 +27,8 @@ arduino-cli lib install ESP32Servo
 tools/compile_firmware.sh
 ```
 
-To upload, first list attached boards, then pass the selected serial device to
-the upload helper:
+To upload the ESP32-CAM, first list attached boards, then pass its serial device
+to the upload helper:
 
 ```sh
 arduino-cli board list
@@ -32,9 +36,11 @@ tools/upload_firmware.sh /dev/cu.usbserial-DEVICE
 ```
 
 GPIO 0 must be connected to ground while flashing and disconnected before
-normal boot. The firmware starts the `DroneTracker` access point with password
-`dronetrack`, listens at `192.168.4.1:5005`, streams QVGA JPEG at 10 fps, and
-accepts servo commands over the same socket.
+normal boot. The camera firmware starts the `DroneTracker` access point with
+password `dronetrack`, listens at `192.168.4.1:5005`, and streams QVGA JPEG at
+10 fps. Flash `firmware/tracker_controller/tracker_controller.ino` to the
+controller board with Arduino CLI. It joins the same access point at
+`192.168.4.2` and accepts pan/tilt commands on port `5006`.
 
 ## macOS environment
 
@@ -64,23 +70,24 @@ On an Apple-silicon Mac with a supported PyTorch build, the command should print
 
 1. Flash the ESP32-CAM, disconnect GPIO 0 from ground, and reset the board.
 2. Confirm serial output reports `192.168.4.1:5005`.
-3. Leave both servo horns detached and connect the external 5 V servo supply.
-4. Join Wi-Fi `DroneTracker` using password `dronetrack`.
-5. Start vision without actuator output:
+3. Flash the controller ESP32 and confirm it reports `192.168.4.2:5006`.
+4. Leave both servo horns detached and connect the external 5 V servo supply.
+5. Join Wi-Fi `DroneTracker` using password `dronetrack`.
+6. Start vision without actuator output:
 
    ```sh
    .venv/bin/drone-tracker --offline --device mps --no-servos --prompt "a small drone"
    ```
 
-6. Confirm detections refresh and KLT points follow the target. Press `q` to
+7. Confirm detections refresh and KLT points follow the target. Press `q` to
    exit.
-7. Center the mount mechanically, attach the horns, and start the complete loop:
+8. Center the mount mechanically, attach the horns, and start the complete loop:
 
    ```sh
    .venv/bin/drone-tracker --offline --device mps --prompt "a small drone"
    ```
 
-8. If the optical and mechanical centers differ, add measured offsets:
+9. If the optical and mechanical centers differ, add measured offsets:
 
    ```sh
    .venv/bin/drone-tracker --offline --device mps --pan-offset 3 --tilt-offset -2

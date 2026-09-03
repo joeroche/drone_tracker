@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "drone-tracker"
 version = "0.2.0"
-description = "Single-ESP32-CAM Grounding DINO and KLT pan-tilt tracker"
+description = "Dual-ESP32 Grounding DINO and KLT pan-tilt tracker"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

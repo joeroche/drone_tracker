@@ -11,7 +11,7 @@ from .config import Settings
 from .control import AlignmentController, ServoCommand
 from .detector import Detection, GroundingDinoDetector
 from .tracking import Box, KltBoxTracker
-from .transport import TrackerConnection
+from .transport import ControllerConnection, TrackerConnection
 
 
 def decode_jpeg(data: bytes, flip_180: bool) -> np.ndarray | None:
@@ -62,6 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", choices=("auto", "mps", "cpu"), default="auto")
     parser.add_argument("--host", default=Settings.tcp_host)
     parser.add_argument("--port", type=int, default=Settings.tcp_port)
+    parser.add_argument("--controller-host", default=Settings.controller_host)
+    parser.add_argument("--controller-port", type=int, default=Settings.controller_port)
     parser.add_argument("--inference-interval", type=int, default=Settings.inference_interval)
     parser.add_argument("--pan-offset", type=float, default=Settings.pan_offset_deg)
     parser.add_argument("--tilt-offset", type=float, default=Settings.tilt_offset_deg)
@@ -82,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         prompt=args.prompt,
         tcp_host=args.host,
         tcp_port=args.port,
+        controller_host=args.controller_host,
+        controller_port=args.controller_port,
         inference_interval=args.inference_interval,
         pan_offset_deg=args.pan_offset,
         tilt_offset_deg=args.tilt_offset,
@@ -95,12 +99,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"inference device: {detector.device}")
 
-    connection = TrackerConnection(
+    camera_connection = TrackerConnection(
         settings.tcp_host,
         settings.tcp_port,
         settings.max_frame_bytes,
         settings.socket_timeout_s,
         settings.reconnect_delay_s,
+    )
+    controller_connection = ControllerConnection(
+        settings.controller_host,
+        settings.controller_port,
+        settings.socket_timeout_s,
     )
     tracker = KltBoxTracker(settings)
     controller = AlignmentController(settings)
@@ -109,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         while True:
-            jpeg = connection.latest_frame()
+            jpeg = camera_connection.latest_frame()
             if jpeg is None:
                 if not args.no_display and cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -139,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                 height, width = frame.shape[:2]
                 command = controller.command(tracker.box, width, height)
                 if command is not None and not args.no_servos:
-                    connection.send_servo(command.pan, command.tilt)
+                    controller_connection.send_servo(command.pan, command.tilt)
 
             if not args.no_display:
                 point_count = 0 if tracker.points is None else len(tracker.points)
@@ -158,7 +167,8 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        connection.close()
+        camera_connection.close()
+        controller_connection.close()
         if not args.no_display:
             cv2.destroyAllWindows()
     return 0
