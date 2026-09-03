@@ -53,10 +53,6 @@ pan  = clamp(90 + 90*EMA(ex) + pan_offset,  0, 180)
 tilt = clamp(90 + 90*EMA(ey) + tilt_offset, 0, 180)
 ```
 
-The error EMA uses `alpha=0.40`; commands stop inside a 10-pixel dead zone.
-Frame parsing is self-synchronizing after partial or corrupt reads, rejects
-payloads over 200 kB, and preserves a split start marker across TCP chunks.
-
 ## Run it
 
 ```sh
@@ -90,7 +86,7 @@ firmware compilation, model caching, and the ordered bring-up procedure.
 
 *Improved 3D printed mount that was made after the demo.*
 
-This project could be vastly improved with GPU inference and a fine-tuned model for drones, but I lacked the resources at the time of production.
+This project could be vastly improved with GPU inference and a fine-tuned model for drones, but I lacked the resources at the time of production. An updated version has been in the works, but paused due to higher priority work in university.
 
 ## License
 
