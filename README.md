@@ -86,7 +86,7 @@ firmware compilation, model caching, and the ordered bring-up procedure.
 
 *Improved 3D printed mount that was made after the demo.*
 
-This project could be vastly improved with GPU inference and a fine-tuned model for drones, but I lacked the resources at the time of production. An updated version has been in the works, but paused due to higher priority work in university.
+This project could be vastly improved with GPU inference and a fine-tuned model for drones, but I lacked the resources at the time of production. An updated version with a dual-esp32 mechanism and more advanced tracking pipeline has been in the works, but paused due to higher priority work in university. A rough version of its codebase can be seen in the archive/dual-esp32 branch.
 
 ## License
 
